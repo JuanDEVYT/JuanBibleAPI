@@ -179,19 +179,41 @@ def index():
 
 
 # ---------------------------------------------------------------------------
-# DEPURACIÓN: devuelve el HTML crudo que llega desde wol.jw.org, para poder
-# ver qué ids/clases usa realmente y ajustar extract_verses(). Es de solo
-# lectura (no expone nada tuyo, solo la página pública que ya es visible
-# para cualquiera en el navegador), pero una vez que ya no la necesites
-# podés volver a comentar esta ruta.
-@app.route("/debug-html")
-def debug_html():
+# DEPURACIÓN: en vez de devolver el HTML completo (que es larguísimo y se
+# trunca al inspeccionarlo), busca en el servidor los ids con pinta de
+# versículo (v + dígitos) y algunos contenedores típicos, y devuelve un
+# resumen chiquito en JSON. Es de solo lectura. Podés comentarla de nuevo
+# una vez que ya no la necesites.
+@app.route("/debug-verse")
+def debug_verse():
     book = int(request.args.get("book", 43))
     chapter = int(request.args.get("chapter", 3))
     lang = request.args.get("lang", "S").upper()
     url = wol_chapter_url(lang, book, chapter)
     resp = requests.get(url, headers=HEADERS, timeout=10)
-    return resp.text, 200, {"Content-Type": "text/plain; charset=utf-8"}
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    # Cualquier elemento cuyo id sea "v" + 8 o 9 dígitos (candidato a verso).
+    verse_like = soup.find_all(id=re.compile(r"^v\d{8,9}$"))
+    verse_ids = [el.get("id") for el in verse_like][:20]
+
+    # Contenedores típicos de texto bíblico en distintas versiones del sitio.
+    candidate_selectors = ["#bibleText", ".bibleText", "#article", ".docSubContent", ".contentBox", "article"]
+    containers_found = {sel: bool(soup.select_one(sel)) for sel in candidate_selectors}
+
+    sample = None
+    if verse_like:
+        # Devolvemos el HTML del primer verso encontrado, para ver su estructura interna.
+        sample = str(verse_like[0])[:1500]
+
+    return jsonify({
+        "source_url": url,
+        "page_title": soup.title.string if soup.title else None,
+        "total_elements_with_id": len(soup.find_all(id=True)),
+        "verse_like_ids_found": verse_ids,
+        "containers_found": containers_found,
+        "first_verse_like_html_sample": sample,
+    })
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
