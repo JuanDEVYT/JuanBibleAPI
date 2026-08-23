@@ -178,15 +178,21 @@ def index():
     })
 
 
+# ---------------------------------------------------------------------------
+# DEPURACIÓN: devuelve el HTML crudo que llega desde wol.jw.org, para poder
+# ver qué ids/clases usa realmente y ajustar extract_verses(). Es de solo
+# lectura (no expone nada tuyo, solo la página pública que ya es visible
+# para cualquiera en el navegador), pero una vez que ya no la necesites
+# podés volver a comentar esta ruta.
+@app.route("/debug-html")
+def debug_html():
+    book = int(request.args.get("book", 43))
+    chapter = int(request.args.get("chapter", 3))
+    lang = request.args.get("lang", "S").upper()
+    url = wol_chapter_url(lang, book, chapter)
+    resp = requests.get(url, headers=HEADERS, timeout=10)
+    return resp.text, 200, {"Content-Type": "text/plain; charset=utf-8"}
+# ---------------------------------------------------------------------------
 
-
- @app.route("/debug-html")
- def debug_html():
-     book = int(request.args.get("book", 43))
-     chapter = int(request.args.get("chapter", 3))
-     lang = request.args.get("lang", "S").upper()
-     url = wol_chapter_url(lang, book, chapter)
-     resp = requests.get(url, headers=HEADERS, timeout=10)
-     return resp.text, 200, {"Content-Type": "text/plain; charset=utf-8"}
 if __name__ == "__main__":
     app.run(debug=True)
