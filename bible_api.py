@@ -178,21 +178,15 @@ def index():
     })
 
 
-# ---------------------------------------------------------------------------
-# DEPURACIÓN si algún día deja de encontrar versículos (cambió el HTML):
-# entrá a este endpoint y mirá el HTML crudo que está llegando, buscá a mano
-# el id real que usa wol.jw.org para un versículo (Ctrl+F por el número de
-# versículo en el HTML) y ajustá el patrón de `vid` en extract_verses().
-#
-# @app.route("/debug-html")
-# def debug_html():
-#     book = int(request.args.get("book", 43))
-#     chapter = int(request.args.get("chapter", 3))
-#     lang = request.args.get("lang", "S").upper()
-#     url = wol_chapter_url(lang, book, chapter)
-#     resp = requests.get(url, headers=HEADERS, timeout=10)
-#     return resp.text, 200, {"Content-Type": "text/plain; charset=utf-8"}
-# ---------------------------------------------------------------------------
 
+
+ @app.route("/debug-html")
+ def debug_html():
+     book = int(request.args.get("book", 43))
+     chapter = int(request.args.get("chapter", 3))
+     lang = request.args.get("lang", "S").upper()
+     url = wol_chapter_url(lang, book, chapter)
+     resp = requests.get(url, headers=HEADERS, timeout=10)
+     return resp.text, 200, {"Content-Type": "text/plain; charset=utf-8"}
 if __name__ == "__main__":
     app.run(debug=True)
