@@ -204,9 +204,19 @@ def debug_verse():
     resp = requests.get(url, headers=HEADERS, timeout=10)
     soup = BeautifulSoup(resp.text, "html.parser")
 
-    # Formato actual (2026): <span class="v" id="v{book}-{chapter}-{verse}">,
-    # sin ceros a la izquierda y separado por guiones. Se mantiene también el
-    # patrón viejo (dígitos pegados) como referencia por si vuelve a cambiar.
+    # Diagnóstico ampliado: en vez de adivinar el patrón de antemano,
+    # devolvemos TODOS los ids que contengan dígitos (para ver el formato
+    # real tal cual está hoy en la página) y buscamos manualmente "43" y "3"
+    # (book=43, chapter=3) en cualquier posición dentro del id.
+    all_ids_with_digits = [
+        el.get("id") for el in soup.find_all(id=True)
+        if any(ch.isdigit() for ch in el.get("id"))
+    ][:60]
+
+    ids_mentioning_book_chapter = [
+        i for i in all_ids_with_digits if "43" in i and "3" in i
+    ][:30]
+
     verse_like = soup.find_all("span", class_="v", id=re.compile(r"^v\d+-\d+-\d+$"))
     if not verse_like:
         verse_like = soup.find_all(id=re.compile(r"^v\d{8,9}$"))
@@ -215,6 +225,10 @@ def debug_verse():
     # Contenedores típicos de texto bíblico en distintas versiones del sitio.
     candidate_selectors = ["#bibleText", ".bibleText", "#article", ".docSubContent", ".contentBox", "article"]
     containers_found = {sel: bool(soup.select_one(sel)) for sel in candidate_selectors}
+
+    # ¿Existe algún elemento con class="v" en cualquier lado, sin importar el id?
+    class_v_elements = soup.find_all(class_="v")
+    class_v_sample = [str(el)[:200] for el in class_v_elements[:5]]
 
     sample = None
     if verse_like:
@@ -227,7 +241,11 @@ def debug_verse():
         "page_title": soup.title.string if soup.title else None,
         "total_elements_with_id": len(soup.find_all(id=True)),
         "verse_like_ids_found": verse_ids,
+        "all_ids_with_digits_sample": all_ids_with_digits,
+        "ids_mentioning_book_and_chapter": ids_mentioning_book_chapter,
         "containers_found": containers_found,
+        "class_v_elements_found": len(class_v_elements),
+        "class_v_sample": class_v_sample,
         "first_verse_like_html_sample": sample,
         # Diagnóstico extra: tamaño real del HTML recibido y una muestra cruda.
         # Si html_length es chico (unos pocos KB) y raw_html_sample muestra un
@@ -235,6 +253,45 @@ def debug_verse():
         # que el bloqueo es anti-bot y no un problema de selectores.
         "html_length": len(resp.text),
         "raw_html_sample": resp.text[:1200],
+    })
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# DEPURACIÓN 2: prueba la API oficial de descargas de publicaciones de JW.org
+# (la misma que usa la app JW Library), a ver si nos da un link de descarga
+# usable para el libro completo en vez de tener que scrapear wol.jw.org.
+# Es de solo lectura. Podés comentarla una vez que ya no la necesites.
+@app.route("/debug-pubapi")
+def debug_pubapi():
+    book = request.args.get("book", "43")
+    lang = request.args.get("lang", "S").upper()
+    pub = request.args.get("pub", "nwt")
+    fileformat = request.args.get("fileformat", "RTF")
+
+    url = "https://b.jw-cdn.org/apis/pub-media/GETPUBMEDIALINKS"
+    params = {
+        "output": "json",
+        "pub": pub,
+        "booknum": book,
+        "langwritten": lang,
+        "fileformat": fileformat,
+    }
+    try:
+        resp = requests.get(url, params=params, headers=HEADERS, timeout=10)
+    except requests.RequestException as e:
+        return jsonify({"error": f"No se pudo contactar la API: {e}", "url": url}), 502
+
+    try:
+        data = resp.json()
+    except ValueError:
+        data = None
+
+    return jsonify({
+        "requested_url": resp.url,
+        "http_status": resp.status_code,
+        "json_response": data,
+        "raw_text_sample": None if data is not None else resp.text[:1000],
     })
 # ---------------------------------------------------------------------------
 
