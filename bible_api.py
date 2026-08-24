@@ -36,6 +36,10 @@ HEADERS = {
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
     ),
+    # wol.jw.org está detrás de Akamai (protección anti-bot). Sin el header
+    # "Accept" completo, Akamai puede detectar el request como bot y servir
+    # una versión reducida de la página (sin el contenido bíblico real).
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "es-ES,es;q=0.9,en;q=0.8",
 }
 
@@ -219,11 +223,18 @@ def debug_verse():
 
     return jsonify({
         "source_url": url,
+        "http_status": resp.status_code,
         "page_title": soup.title.string if soup.title else None,
         "total_elements_with_id": len(soup.find_all(id=True)),
         "verse_like_ids_found": verse_ids,
         "containers_found": containers_found,
         "first_verse_like_html_sample": sample,
+        # Diagnóstico extra: tamaño real del HTML recibido y una muestra cruda.
+        # Si html_length es chico (unos pocos KB) y raw_html_sample muestra un
+        # challenge/captcha de Akamai en vez de contenido de la Biblia, confirma
+        # que el bloqueo es anti-bot y no un problema de selectores.
+        "html_length": len(resp.text),
+        "raw_html_sample": resp.text[:1200],
     })
 # ---------------------------------------------------------------------------
 
