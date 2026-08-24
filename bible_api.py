@@ -89,25 +89,31 @@ def clean_verse_text(text):
 
 def extract_verses(html, book, chapter, verse_start, verse_end):
     soup = BeautifulSoup(html, "html.parser")
-    # wol.jw.org ya no usa #bibleText como contenedor ni ids del tipo
-    # "v43003016" (dígitos pegados). Ahora el marcado es
-    # <span class="v" id="v43-3-16">...</span> dentro de #article, con
-    # book-chapter-verse separados por guiones y SIN ceros a la izquierda.
+    # Formato real (confirmado 2026-08-24): wol.jw.org ya no usa #bibleText ni
+    # ids tipo "v43003016". Ahora es <span class="v" id="v{book}-{chapter}-{verse}-{parte}">
+    # dentro de #article. El "-{parte}" existe porque un mismo versículo puede
+    # venir partido en varios <span> (cuando hay notas de estudio/referencias
+    # cruzadas en el medio), así que hay que juntar TODOS los spans que
+    # empiecen con ese prefijo, no solo buscar un id exacto.
     container = soup.select_one("#article") or soup
 
     results = []
     for v in range(verse_start, verse_end + 1):
-        vid = f"v{int(book)}-{int(chapter)}-{v}"
-        el = container.find("span", class_="v", id=vid)
-        if not el:
-            # fallback por si algún día vuelven al formato viejo o cambian de nuevo
-            el = container.find(id=vid)
-        if not el:
+        prefix = f"v{int(book)}-{int(chapter)}-{v}-"
+        parts = container.find_all(
+            "span", class_="v",
+            id=lambda x: bool(x) and x.startswith(prefix)
+        )
+        if not parts:
             continue
-        el = BeautifulSoup(str(el), "html.parser")  # copia para no mutar el árbol original
-        # Quita el numerito de versículo/capítulo y notas/referencias que
-        # vienen incrustadas como elementos aparte dentro del span del verso.
-        for junk in el.select(".verseNum, .chapterNum, sup, .footnoteLink, .xrefLink, .fn, a.b"):
+        # Ordena por el número de parte al final del id (v43-3-16-1, -2, ...)
+        parts = sorted(parts, key=lambda el: int(el.get("id").rsplit("-", 1)[-1]))
+        combined_html = "".join(str(p) for p in parts)
+        el = BeautifulSoup(combined_html, "html.parser")
+        # El numerito de versículo/capítulo viene en un <a class="vx ..."> al
+        # principio de cada span (cl=marca de capítulo, vl=marca de versículo).
+        # Las referencias cruzadas vienen en <a class="b" data-bid="...">.
+        for junk in el.select("a.vx, a.b, sup, .footnoteLink, .xrefLink, .fn"):
             junk.decompose()
         text = clean_verse_text(el.get_text(" "))
         if text:
