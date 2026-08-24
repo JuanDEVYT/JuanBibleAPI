@@ -85,12 +85,19 @@ def clean_verse_text(text):
 
 def extract_verses(html, book, chapter, verse_start, verse_end):
     soup = BeautifulSoup(html, "html.parser")
-    container = soup.select_one("#bibleText") or soup
+    # wol.jw.org ya no usa #bibleText como contenedor ni ids del tipo
+    # "v43003016" (dígitos pegados). Ahora el marcado es
+    # <span class="v" id="v43-3-16">...</span> dentro de #article, con
+    # book-chapter-verse separados por guiones y SIN ceros a la izquierda.
+    container = soup.select_one("#article") or soup
 
     results = []
     for v in range(verse_start, verse_end + 1):
-        vid = f"v{int(book):02d}{int(chapter):03d}{v:03d}"
-        el = container.find(id=vid)
+        vid = f"v{int(book)}-{int(chapter)}-{v}"
+        el = container.find("span", class_="v", id=vid)
+        if not el:
+            # fallback por si algún día vuelven al formato viejo o cambian de nuevo
+            el = container.find(id=vid)
         if not el:
             continue
         el = BeautifulSoup(str(el), "html.parser")  # copia para no mutar el árbol original
@@ -193,8 +200,12 @@ def debug_verse():
     resp = requests.get(url, headers=HEADERS, timeout=10)
     soup = BeautifulSoup(resp.text, "html.parser")
 
-    # Cualquier elemento cuyo id sea "v" + 8 o 9 dígitos (candidato a verso).
-    verse_like = soup.find_all(id=re.compile(r"^v\d{8,9}$"))
+    # Formato actual (2026): <span class="v" id="v{book}-{chapter}-{verse}">,
+    # sin ceros a la izquierda y separado por guiones. Se mantiene también el
+    # patrón viejo (dígitos pegados) como referencia por si vuelve a cambiar.
+    verse_like = soup.find_all("span", class_="v", id=re.compile(r"^v\d+-\d+-\d+$"))
+    if not verse_like:
+        verse_like = soup.find_all(id=re.compile(r"^v\d{8,9}$"))
     verse_ids = [el.get("id") for el in verse_like][:20]
 
     # Contenedores típicos de texto bíblico en distintas versiones del sitio.
